@@ -5,7 +5,7 @@ defmodule Aclient do
     GenServer.start __MODULE__, p
   end
 
-  def init({hostname, port, client_id, socket}) do
+  def init({hostname, port, client_id, req_id, hostport, socket}) do
     :erlang.send_after 100, self(), :tick
 
     IO.puts "created a client proc"
@@ -13,7 +13,7 @@ defmodule Aclient do
     #once receive a hello_ack(c) start the tcp connection
     queue = :ets.new :packets_queue, []
 
-    :ets.insert queue, {:hello_ack, dec(hello_ack_packet(client_id))}
+    :ets.insert queue, {:hello_ack, Udptun.dec(hello_ack_packet(client_id, req_id))}
 
     st = %{
         hostname: hostname,
@@ -27,7 +27,7 @@ defmodule Aclient do
   end
 
 
-  def hello_ack_packet(client_id) do
+  def hello_ack_packet(client_id, req_id) do
     <<
       0::64-little,
       client_id::64-little,
@@ -35,6 +35,8 @@ defmodule Aclient do
       0::16-little,
       0::64-little,
       0::64-little,
+
+      req_id::64-little
     >>
   end
 
@@ -191,11 +193,11 @@ defmodule Udptun do
                   seq_id,
                   ack_id}
 
-            {:ok, newproc} = Aclient.start {hostname, port, client_id, prevstate}
+            {:ok, newproc} = Aclient.start {hostname, port, client_id, reqid, hostport, prevstate}
             :ets.insert :clients, {{hostname, port, client_id}, newproc}
       end
     else
-      IO.puts "(IGNORED PACKET) probably ignored packet #{type}"
+      IO.puts "(IGNORED PACKET) probably ignored packet #{type} #{packetid}"
       lk = :ets.lookup :clients, {hostname, port, client_id}
       case lk do
         [{_, proc}] ->
@@ -233,17 +235,6 @@ defmodule Udptun do
     pkey = :binary.part key, 0, byte_size(msg)
     pad <> :crypto.exor(pkey, msg)
   end
-
 end
-#
-#
-# t = Task.start fn()->
-#   res = "asdadadadadasdadasdasdada"
-#   {:ok, asock} = :gen_udp.open 0, [mode: :binary]
-#   Enum.each 1..10000, fn(x)->
-#     :gen_udp.send asock, '100.67.61.151', 7070, res
-#     :timer.sleep 1
-#   end
-# end
 
 #p = GenServer.start Udptun, []
