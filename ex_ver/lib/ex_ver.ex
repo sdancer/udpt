@@ -5,7 +5,7 @@ defmodule Aclient do
     GenServer.start __MODULE__, p
   end
 
-  def init({hostname, port, client_id, req_id, hostport, socket}) do
+  def init({hostname, port, client_id, reqid, dest_hostport, socket}) do
     :erlang.send_after 100, self(), :tick
 
     IO.puts "created a client proc"
@@ -21,7 +21,9 @@ defmodule Aclient do
         client_id: client_id,
         sendsock: socket,
         queue: queue,
-        queueptr: :"$end_of_table"
+        queueptr: :"$end_of_table",
+        dest_hostport: dest_hostport,
+        #reqid: reqid
       }
     {:ok, st}
   end
@@ -29,7 +31,7 @@ defmodule Aclient do
 
   def hello_ack_packet(client_id, req_id) do
     <<
-      0::64-little,
+      0::64-little, #incremental unique identifier?
       client_id::64-little,
       Udptun.atom_to_type(MSG_TYPE_HELLO_ACK),
       0::16-little,
@@ -65,12 +67,15 @@ defmodule Aclient do
         a ->
           :ets.next queue, a
       end
-      if next != :"$end_of_table" do
+
+      npacket = if next != :"$end_of_table" do
         [{key, packet}] = :ets.lookup queue, next
-        {%{state | queueptr: next}, packet}
+        packet
       else
-        {%{state | queueptr: next}, nil}
+        nil
       end
+
+      {%{state | queueptr: next}, npacket}
   end
 end
 
@@ -174,7 +179,7 @@ defmodule Udptun do
     # if client doesn't exists, and msg isn't MSG_TYPE_HELLO, terminate conn
     if MSG_TYPE_HELLO == type do
       rest = :binary.part rest, 0, length
-      {reqid, hostport} = case rest do
+      {reqid, dest_hostport} = case rest do
         <<reqid::64-little, rest::binary>> ->
           {reqid, rest}
         _ ->
@@ -184,7 +189,7 @@ defmodule Udptun do
       lk = :ets.lookup :clients, {hostname, port, client_id}
       case lk do
         [{_, proc}] ->
-          IO.puts "(IGNORED PACKET) client proc already exists #{reqid} #{inspect hostport}"
+            IO.puts "(IGNORED PACKET) client proc already exists #{reqid} #{inspect hostport}"
         _ ->
           IO.inspect {:got_packet, packetid,
                   client_id,
@@ -193,7 +198,8 @@ defmodule Udptun do
                   seq_id,
                   ack_id}
 
-            {:ok, newproc} = Aclient.start {hostname, port, client_id, reqid, hostport, prevstate}
+            {:ok, newproc} = Aclient.start {hostname, port, client_id, reqid, dest_hostport, prevstate}
+
             :ets.insert :clients, {{hostname, port, client_id}, newproc}
       end
     else
