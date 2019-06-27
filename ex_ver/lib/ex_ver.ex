@@ -5,7 +5,7 @@ defmodule Aclient do
     GenServer.start __MODULE__, p
   end
 
-  def init({hostname, port, client_id, reqid, dest_hostport, socket}) do
+  def init({hostname, port, client_id, req_id, dest_hostport, socket}) do
     :erlang.send_after 100, self(), :tick
 
     IO.puts "created a client proc"
@@ -69,7 +69,7 @@ defmodule Aclient do
       end
 
       npacket = if next != :"$end_of_table" do
-        [{key, packet}] = :ets.lookup queue, next
+        [{_key, packet}] = :ets.lookup queue, next
         packet
       else
         nil
@@ -94,7 +94,7 @@ defmodule Udptun do
   end
 
 
-  def process_info(:quit, x) do
+  def process_info(:quit, _x) do
     IO.inspect :killed
     exit(:halt)
   end
@@ -129,7 +129,6 @@ defmodule Udptun do
 
       {:noreply, prevstate}
   end
-
 
   def atom_to_type(MSG_TYPE_DISCART), do: 0
   def atom_to_type(MSG_TYPE_HELLO), do: 0x02
@@ -188,8 +187,8 @@ defmodule Udptun do
 
       lk = :ets.lookup :clients, {hostname, port, client_id}
       case lk do
-        [{_, proc}] ->
-            IO.puts "(IGNORED PACKET) client proc already exists #{reqid} #{inspect hostport}"
+        [{_, _proc}] ->
+            IO.puts "(IGNORED PACKET) client proc already exists #{reqid} #{inspect port}"
         _ ->
           IO.inspect {:got_packet, packetid,
                   client_id,
@@ -214,6 +213,7 @@ defmodule Udptun do
           seq_id,
           ack_id, rest}
         _ ->
+            nil
             #send nack, so the client knows its a dead connection
       end
     end
@@ -221,10 +221,9 @@ defmodule Udptun do
     prevstate
   end
 
-  def handle_info({:udp, _asock, hostname, port, binmsg}, prevstate) do
-      IO.inspect {:got_msg, dec(binmsg, "")}
 
-      {:noreply, prevstate}
+  def dec(x) do
+    dec(x, "")
   end
 
   def dec("", pad) do
