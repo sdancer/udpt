@@ -118,7 +118,7 @@ void proc_send_queue(
         (first_low->sentcount)++;
     }
 
-    sock_send(transmisor, sdata, MSG_MAX_LEN + sizeof(msg_hdr_t));
+    sock_send(transmisor, sdata, pheader->length + sizeof(msg_hdr_t));
 
     stas_packets_sent += 1;
 }
